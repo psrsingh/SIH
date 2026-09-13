@@ -1,4 +1,0 @@
-{
-  "private": true,
-  "description": "Python backend; frontend dependencies are pinned by the import map."
-}
