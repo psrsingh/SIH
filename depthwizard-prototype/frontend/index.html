@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DepthWizard — Single-View Height Estimation</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">DW</span>
+    <div class="brand-text">
+      <span class="brand-name">DepthWizard</span>
+      <span class="brand-sub">SIH26175 · single-view height estimation &amp; 3D flythrough</span>
+    </div>
+  </div>
+  <div id="status" class="status">idle</div>
+</header>
+
+<main class="layout">
+
+  <aside class="panel">
+    <section class="panel-block">
+      <h2>1 · Source image</h2>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.tif,.tiff" hidden />
+        <span id="dropLabel">Drop a PNG / JPG / GeoTIFF, or click to browse</span>
+        <img id="previewImg" class="preview-img" hidden />
+      </label>
+      <p class="hint" id="fileMeta">No image selected.</p>
+    </section>
+
+    <section class="panel-block">
+      <h2>2 · Height range (m)</h2>
+      <p class="hint">Non-georeferenced images have no absolute scale — set the
+        expected min/max elevation for this scene to calibrate the surface.</p>
+      <div class="row">
+        <label class="field">
+          <span>Min</span>
+          <input type="number" id="minHeight" value="0" step="1" />
+        </label>
+        <label class="field">
+          <span>Max</span>
+          <input type="number" id="maxHeight" value="50" step="1" />
+        </label>
+      </div>
+      <label class="field full">
+        <span>Mesh resolution</span>
+        <input type="range" id="meshRes" min="60" max="220" value="150" />
+        <span id="meshResVal" class="mono">150</span>
+      </label>
+    </section>
+
+    <section class="panel-block" id="demBlock" hidden>
+      <h2>2b · Reference DEM (optional)</h2>
+      <p class="hint">GeoTIFF input only. Upload a low-res DEM (e.g. SRTM)
+        covering the same area to fit real metric elevation instead of the
+        min/max guess above.</p>
+      <label class="dropzone dropzone-small" id="demDropzone">
+        <input type="file" id="demInput" accept=".tif,.tiff" hidden />
+        <span id="demDropLabel">Drop a reference DEM GeoTIFF, or click to browse</span>
+      </label>
+      <p class="hint" id="demMeta">No reference DEM selected.</p>
+    </section>
+
+    <section class="panel-block" id="gcpBlock">
+      <h2>2c · Ground control points (optional)</h2>
+      <p class="hint">CSV columns: x, y, elevation. GeoJSON points use an elevation property.</p>
+      <label class="dropzone dropzone-small" id="gcpDropzone">
+        <input type="file" id="gcpInput" accept=".csv,.json,.geojson" hidden />
+        <span id="gcpDropLabel">Optional GCP CSV / GeoJSON</span>
+      </label>
+      <p class="hint" id="gcpMeta">No GCP file selected.</p>
+    </section>
+
+    <button id="runBtn" class="run-btn">Generate terrain</button>
+
+    <section class="panel-block" id="resultBlock" hidden>
+      <h2>3 · Result</h2>
+      <div id="scientificWarning" class="scientific-warning" hidden></div>
+      <ul class="kv">
+        <li><span>Model</span><b id="rModel" class="mono">—</b></li>
+        <li><span>Depth method</span><b id="rMethod" class="mono">—</b></li>
+        <li><span>Calibration</span><b id="rCalibration" class="mono">—</b></li>
+        <li><span>Georeferenced</span><b id="rGeo" class="mono">—</b></li>
+        <li><span>Elevation type</span><b id="rAbsolute" class="mono">—</b></li>
+        <li><span>Elevation range</span><b id="rRange" class="mono">—</b></li>
+        <li><span>Processing time</span><b id="rTime" class="mono">—</b></li>
+      </ul>
+      <img id="depthPreview" class="depth-preview" alt="relative depth preview" />
+      <a id="dsmLink" class="dsm-link" hidden download>Download DSM (GeoTIFF)</a>
+      <section id="validationBlock" class="validation" hidden>
+        <h3>Reference validation</h3>
+        <ul class="kv">
+          <li><span>Fit RMSE</span><b id="rRmse" class="mono">—</b></li>
+          <li><span>Fit MAE</span><b id="rMae" class="mono">—</b></li>
+          <li><span>Correlation</span><b id="rCorrelation" class="mono">—</b></li>
+        </ul>
+        <div id="tileErrors" class="tile-errors"></div>
+      </section>
+    </section>
+  </aside>
+
+  <section class="viewport">
+    <canvas id="viewportCanvas"></canvas>
+    <div class="viewport-hint" id="viewportHint">
+      Upload an image and click <b>Generate terrain</b> to fly through it.
+    </div>
+    <div class="probe" id="probe" hidden>
+      <span>elev</span><b id="probeElev" class="mono">—</b>
+      <span>slope</span><b id="probeSlope" class="mono">—</b>
+    </div>
+    <div class="viewport-toolbar" id="viewportToolbar" hidden>
+      <button data-mode="texture" class="mode-btn active">RGB texture</button>
+      <button data-mode="elevation" class="mode-btn">Elevation ramp</button>
+    </div>
+  </section>
+
+</main>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

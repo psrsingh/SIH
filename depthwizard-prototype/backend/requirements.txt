@@ -1,0 +1,20 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pillow
+numpy
+trimesh
+rasterio
+
+# Depth model backends (optional but recommended — the app falls back to a
+# synthetic depth proxy if these aren't installed / no internet is available)
+transformers
+torch
+timm
+
+# Optional training/data preparation dependency; inference remains offline-safe.
+datasets
+mlcroissant
+GitPython
+h5py
+pytest

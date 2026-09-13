@@ -1,0 +1,16 @@
+{
+  "samples": [
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache_small\\test\\000000.npz",
+      "metadata": {
+        "sample": "DC_15_27"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache_small\\test\\000001.npz",
+      "metadata": {
+        "sample": "DC_16_13"
+      }
+    }
+  ]
+}

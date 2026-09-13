@@ -1,0 +1,33 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Node dependencies
+**/node_modules/
+
+# Generated DepthWizard outputs
+**/backend/outputs/*
+**/training/gamus_cache/
+**/training/*.json
+**/training/*.csv
+**/evaluation_results.json
+*.log
+.env
+
+# Local model checkpoints
+**/backend/models/
+**/training/checkpoints/
+**/training/smoke_checkpoint*/
+**/training/**/*.pt
+**/training/**/*.pth
+**/training/**/*.ckpt
+**/training/**/*.safetensors
+**/training/**/*.bin
+
+# Local tooling and OS files
+.vscode/
+.DS_Store
+Thumbs.db

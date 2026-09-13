@@ -1,0 +1,112 @@
+{
+  "samples": [
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000000.npz",
+      "metadata": {
+        "sample": "DC_03_26"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000001.npz",
+      "metadata": {
+        "sample": "DC_05_28"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000002.npz",
+      "metadata": {
+        "sample": "DC_05_30"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000003.npz",
+      "metadata": {
+        "sample": "DC_07_21"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000004.npz",
+      "metadata": {
+        "sample": "DC_09_18"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000005.npz",
+      "metadata": {
+        "sample": "DC_09_29"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000006.npz",
+      "metadata": {
+        "sample": "DC_09_32"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000007.npz",
+      "metadata": {
+        "sample": "DC_10_20"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000008.npz",
+      "metadata": {
+        "sample": "DC_11_15"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000009.npz",
+      "metadata": {
+        "sample": "DC_11_31"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000010.npz",
+      "metadata": {
+        "sample": "DC_11_32"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000011.npz",
+      "metadata": {
+        "sample": "DC_12_15"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000012.npz",
+      "metadata": {
+        "sample": "DC_12_20"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000013.npz",
+      "metadata": {
+        "sample": "DC_12_34"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000014.npz",
+      "metadata": {
+        "sample": "DC_12_35"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000015.npz",
+      "metadata": {
+        "sample": "DC_13_19"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000016.npz",
+      "metadata": {
+        "sample": "DC_13_21"
+      }
+    },
+    {
+      "path": "depthwizard-prototype\\training\\gamus_smoke_cache\\train\\000017.npz",
+      "metadata": {
+        "sample": "DC_13_25"
+      }
+    }
+  ]
+}

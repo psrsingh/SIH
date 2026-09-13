@@ -1,0 +1,11 @@
+{
+  "train": {
+    "count": 18
+  },
+  "validation": {
+    "count": 4
+  },
+  "test": {
+    "count": 3
+  }
+}
