@@ -43,6 +43,7 @@ def read_geotiff_info(path: Path) -> Optional[dict]:
         with rasterio.open(path) as src:
             return {
                 "crs": str(src.crs) if src.crs else None,
+                "is_geographic": bool(src.crs.is_geographic) if src.crs else None,
                 "bounds": list(src.bounds),
                 "resolution": list(src.res),
                 "width": src.width,
@@ -129,7 +130,8 @@ def _fit_metrics(prediction, target):
 # CALIBRATE USING REFERENCE DEM
 # ============================================================
 
-def calibrate_with_reference_dem(rel_depth: np.ndarray, reference_elevation: np.ndarray):
+def calibrate_with_reference_dem(rel_depth: np.ndarray, reference_elevation: np.ndarray,
+                                  dem_nodata_declared: Optional[bool] = None):
     """
     Convert relative depth to metric elevation.
 
@@ -182,10 +184,17 @@ def calibrate_with_reference_dem(rel_depth: np.ndarray, reference_elevation: np.
         )["correlation"],
         "sample_count": len(d),
         "absolute": True,
+        "dem_nodata_declared": dem_nodata_declared,
         "note": (
             "Relative monocular depth was converted to metric elevation "
             "using least-squares regression against the supplied "
             "reference DEM."
+            if dem_nodata_declared is not False else
+            "Relative monocular depth was converted to metric elevation "
+            "using least-squares regression against the supplied "
+            "reference DEM. The reference DEM does not declare a nodata "
+            "value, so any void/sentinel pixels it contains could not be "
+            "excluded and may have influenced the fit."
         ),
     }
 
@@ -236,7 +245,8 @@ def _calibrate_with_gcps(rel_depth, gcps):
     return (a * signed_depth + b).astype(np.float32), info
 
 
-def _calibrate_with_local_dem(rel_depth, reference_elevation, tile_size=64):
+def _calibrate_with_local_dem(rel_depth, reference_elevation, tile_size=64,
+                               dem_nodata_declared: Optional[bool] = None):
     """Fit overlapping local tiles and blend their predictions by distance."""
     height, width = rel_depth.shape
     step = max(1, int(tile_size) // 2)
@@ -280,11 +290,22 @@ def _calibrate_with_local_dem(rel_depth, reference_elevation, tile_size=64):
         "sample_count": metrics["sample_count"],
         "tile_errors": tile_errors,
         "absolute": True,
+        "dem_nodata_declared": dem_nodata_declared,
     }
 
 
-def load_gcps(path: Path):
-    """Read GCPs from CSV or GeoJSON without adding a geometry dependency."""
+def load_gcps(path: Path, transform=None):
+    """Read GCPs from CSV or GeoJSON without adding a geometry dependency.
+
+    CSV coordinates are always pixel column/row (see README). GeoJSON
+    ``Point`` coordinates are conventionally real-world CRS coordinates
+    (lon/lat, or projected easting/northing), not pixel indices — when a
+    georeferencing ``transform`` (the 6-element affine from
+    ``geo_info["transform"]``) is supplied, GeoJSON coordinates are
+    converted to pixel column/row via its inverse. Without a transform
+    (e.g. GCPs attached to a plain, non-georeferenced PNG/JPG), GeoJSON
+    coordinates are treated as already being in pixel space, same as CSV.
+    """
     if path.suffix.lower() == ".csv":
         with path.open(newline="", encoding="utf-8") as handle:
             points = list(csv.DictReader(handle))
@@ -293,17 +314,27 @@ def load_gcps(path: Path):
             return points
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("type") == "FeatureCollection":
+        inverse = ~_affine_from_list(transform) if transform else None
         points = []
         for feature in data.get("features", []):
             coords = feature.get("geometry", {}).get("coordinates", [])
             props = feature.get("properties", {})
             if len(coords) >= 2:
-                points.append({"x": coords[0], "y": coords[1], "elevation": props.get("elevation", props.get("z"))})
+                x, y = coords[0], coords[1]
+                if inverse is not None:
+                    x, y = inverse @ (x, y)
+                points.append({"x": x, "y": y, "elevation": props.get("elevation", props.get("z"))})
         return points
     points = data if isinstance(data, list) else data.get("gcps", [])
     if not points:
         raise ValueError("GCP file contains no points.")
     return points
+
+
+def _affine_from_list(transform):
+    from rasterio import Affine
+
+    return Affine(*transform[:6])
 
 
 # ============================================================
@@ -346,8 +377,9 @@ def _read_reference_dem_on_target_grid(reference_path: Path, target_path: Path):
             dst_nodata=np.nan,
             resampling=Resampling.bilinear,
         )
+        nodata_declared = src.nodata is not None
 
-    return destination
+    return destination, nodata_declared
 
 
 # ============================================================
@@ -372,21 +404,37 @@ def calibrate_height(
              this must NOT be treated as absolute elevation.
     """
     if gcps:
-        return _calibrate_with_gcps(rel_depth, gcps)
+        dsm, info = _calibrate_with_gcps(rel_depth, gcps)
+        if reference_dem_path:
+            info["note"] = (
+                "Both a reference DEM and GCPs were supplied; GCPs took "
+                "precedence and the reference DEM was not used."
+            )
+        return dsm, info
 
     if not np.asarray(rel_depth).ndim == 2 or not np.isfinite(rel_depth).any():
         raise ValueError("Depth prediction contains no valid finite pixels.")
     if not np.isfinite(min_height) or not np.isfinite(max_height) or max_height <= min_height:
         raise ValueError("Height range must be finite and max_height must exceed min_height.")
 
+    if geo_info and geo_info.get("is_geographic"):
+        raise ValueError(
+            "This GeoTIFF uses a geographic CRS (degrees), so its pixel "
+            "resolution cannot be treated as meters for mesh scaling or "
+            "DEM-based calibration. Reproject it to a projected/metric CRS "
+            "(e.g. a UTM zone) before uploading."
+        )
+
     if reference_dem_path and target_geotiff_path and geo_info:
-        reference = _read_reference_dem_on_target_grid(
+        reference, dem_nodata_declared = _read_reference_dem_on_target_grid(
             Path(reference_dem_path), Path(target_geotiff_path)
         )
         try:
-            return _calibrate_with_local_dem(rel_depth, reference, local_tile_size)
+            return _calibrate_with_local_dem(rel_depth, reference, local_tile_size,
+                                              dem_nodata_declared=dem_nodata_declared)
         except ValueError:
-            return calibrate_with_reference_dem(rel_depth, reference)
+            return calibrate_with_reference_dem(rel_depth, reference,
+                                                 dem_nodata_declared=dem_nodata_declared)
 
     d = rel_depth.astype(np.float32)
     finite = np.isfinite(d)

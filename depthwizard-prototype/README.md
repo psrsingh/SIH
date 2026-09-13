@@ -72,9 +72,11 @@ uvicorn main:app --reload --port 8010
 Open **http://localhost:8010** — the FastAPI app serves the frontend directly,
 no separate frontend server needed.
 
-Configuration is available in `.env.example`: `MODEL_CHECKPOINT`,
-`GAMUS_CROISSANT_URL`, `GAMUS_MAX_RECORDS`, `GAMUS_CACHE_DIR`, `DEVICE`,
-`OUTPUT_DIR`, and `MAX_UPLOAD_SIZE`.
+Configuration is available in `backend/.env.example`: `DEPTHWIZARD_CHECKPOINT`,
+`OUTPUT_DIR`, `MAX_UPLOAD_SIZE`, `MAX_IMAGE_PIXELS`, `ALLOWED_ORIGINS`,
+`OUTPUT_RETENTION_HOURS`, `MAX_CONCURRENT_JOBS`, `LOG_LEVEL`, and the
+training-only `GAMUS_CROISSANT_URL` / `GAMUS_MAX_RECORDS` /
+`GAMUS_CACHE_DIR` / `GAMUS_LOCAL_ROOT`.
 
 ## Using it
 
@@ -129,8 +131,11 @@ python training/evaluate_depth.py --checkpoint training/checkpoints/best --data-
 
 Training provides a seed, explicit splits, CUDA mixed precision, validation
 loss/RMSE/MAE/correlation, resume support, `latest.pt`, and a best checkpoint
-selected by validation RMSE. `training/EVALUATION.md` remains `NOT EVALUATED`
-until a real paired dataset and checkpoint are available.
+selected by validation RMSE. The pipeline has only been run as a smoke test
+on the 25-image `GAMUS_SMOKE` sample so far (see `training/EVALUATION.md`)
+— those metrics are not statistically meaningful and that checkpoint is not
+loaded by the backend. A real before/after comparison needs a
+training-sized paired dataset.
 
 ## Mapping to the evaluation criteria
 
@@ -142,8 +147,12 @@ until a real paired dataset and checkpoint are available.
 
 ## Honest limitations
 
-- GAMUS fine-tuning is **not evaluated** because the currently published
-   Croissant metadata exposes an integer label rather than a paired depth raster.
+- GAMUS fine-tuning has only been smoke-tested on a 25-image local sample
+  (see `training/EVALUATION.md`) — not a statistically meaningful evaluation,
+  and that checkpoint is **not** loaded by backend inference. The publicly
+  published Croissant endpoint can't be used for this at all: it exposes an
+  integer label rather than a paired depth raster, so the local
+  RSI-MMSegmentation HDF5 mirror was used instead.
 - The DEM-regression calibration is a **single global linear fit**
   (`elevation = a·depth + b`) over the whole scene. It reports RMSE/MAE for
   transparency, but a single linear fit will underperform in mixed
@@ -168,7 +177,8 @@ until a real paired dataset and checkpoint are available.
 
 ## Verification
 
-Run `python -m pytest`, `python -m pip check`, and the manual browser smoke
+Run `pip install -r backend/requirements-dev.txt`, then `python -m pytest`,
+`python -m pip check`, and the manual browser smoke
 test: open the app, upload a PNG, click Generate terrain, confirm the depth
 preview and GLB viewer, toggle Elevation ramp, and hover the mesh to inspect
 elevation and slope. For GeoTIFF input, confirm CRS/transform are preserved

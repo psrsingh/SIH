@@ -16,7 +16,7 @@
       <span class="brand-sub">SIH26175 · single-view height estimation &amp; 3D flythrough</span>
     </div>
   </div>
-  <div id="status" class="status">idle</div>
+  <div id="status" class="status" role="status" aria-live="polite">idle</div>
 </header>
 
 <main class="layout">
@@ -24,10 +24,10 @@
   <aside class="panel">
     <section class="panel-block">
       <h2>1 · Source image</h2>
-      <label class="dropzone" id="dropzone">
+      <label class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose a source image to upload">
         <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.tif,.tiff" hidden />
         <span id="dropLabel">Drop a PNG / JPG / GeoTIFF, or click to browse</span>
-        <img id="previewImg" class="preview-img" hidden />
+        <img id="previewImg" class="preview-img" alt="Selected source image preview" hidden />
       </label>
       <p class="hint" id="fileMeta">No image selected.</p>
     </section>
@@ -48,7 +48,7 @@
       </div>
       <label class="field full">
         <span>Mesh resolution</span>
-        <input type="range" id="meshRes" min="60" max="220" value="150" />
+        <input type="range" id="meshRes" min="60" max="320" value="150" />
         <span id="meshResVal" class="mono">150</span>
       </label>
     </section>
@@ -58,7 +58,7 @@
       <p class="hint">GeoTIFF input only. Upload a low-res DEM (e.g. SRTM)
         covering the same area to fit real metric elevation instead of the
         min/max guess above.</p>
-      <label class="dropzone dropzone-small" id="demDropzone">
+      <label class="dropzone dropzone-small" id="demDropzone" tabindex="0" role="button" aria-label="Choose a reference DEM GeoTIFF to upload">
         <input type="file" id="demInput" accept=".tif,.tiff" hidden />
         <span id="demDropLabel">Drop a reference DEM GeoTIFF, or click to browse</span>
       </label>
@@ -68,7 +68,7 @@
     <section class="panel-block" id="gcpBlock">
       <h2>2c · Ground control points (optional)</h2>
       <p class="hint">CSV columns: x, y, elevation. GeoJSON points use an elevation property.</p>
-      <label class="dropzone dropzone-small" id="gcpDropzone">
+      <label class="dropzone dropzone-small" id="gcpDropzone" tabindex="0" role="button" aria-label="Choose a ground control points file to upload">
         <input type="file" id="gcpInput" accept=".csv,.json,.geojson" hidden />
         <span id="gcpDropLabel">Optional GCP CSV / GeoJSON</span>
       </label>
@@ -103,10 +103,18 @@
     </section>
   </aside>
 
-  <section class="viewport">
+  <section class="viewport" aria-label="3D terrain viewport">
     <canvas id="viewportCanvas"></canvas>
     <div class="viewport-hint" id="viewportHint">
       Upload an image and click <b>Generate terrain</b> to fly through it.
+    </div>
+    <div class="loading-overlay" id="loadingOverlay" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="loading-step" id="loadingStep">Uploading…</div>
+    </div>
+    <div class="error-banner" id="errorBanner" role="alert" hidden>
+      <span id="errorBannerText"></span>
+      <button id="errorBannerDismiss" aria-label="Dismiss error">&times;</button>
     </div>
     <div class="probe" id="probe" hidden>
       <span>elev</span><b id="probeElev" class="mono">—</b>
@@ -115,6 +123,7 @@
     <div class="viewport-toolbar" id="viewportToolbar" hidden>
       <button data-mode="texture" class="mode-btn active">RGB texture</button>
       <button data-mode="elevation" class="mode-btn">Elevation ramp</button>
+      <button id="resetViewBtn" class="mode-btn" title="Reset camera view">Reset view</button>
     </div>
   </section>
 
@@ -123,8 +132,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
   }
 }
 </script>

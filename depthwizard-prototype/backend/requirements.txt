@@ -1,20 +1,24 @@
-fastapi
-uvicorn[standard]
-python-multipart
-pillow
-numpy
-trimesh
-rasterio
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
+pillow==12.3.0
+numpy==2.5.3
+trimesh==5.1.0
+rasterio==1.5.1
 
 # Depth model backends (optional but recommended — the app falls back to a
 # synthetic depth proxy if these aren't installed / no internet is available)
-transformers
-torch
-timm
+transformers==5.17.0
+torch==2.14.0
+timm==1.0.29
 
 # Optional training/data preparation dependency; inference remains offline-safe.
+# Left unpinned: not exercised by this pass (training uses huggingface_hub's
+# direct file download, not these datasets/mlcroissant loaders — see
+# training/EVALUATION.md).
 datasets
 mlcroissant
 GitPython
-h5py
-pytest
+h5py==3.16.0
+
+# Dev/test-only tooling — see requirements-dev.txt

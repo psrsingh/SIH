@@ -11,11 +11,19 @@ env/
 # Generated DepthWizard outputs
 **/backend/outputs/*
 **/training/gamus_cache/
-**/training/*.json
-**/training/*.csv
+**/training/gamus_cache_check/
+**/training/gamus_smoke_cache/
+**/training/gamus_smoke_cache_small/
+**/training/**/*.json
+**/training/**/*.csv
 **/evaluation_results.json
 *.log
 .env
+
+# GAMUS raw sample data (fetch locally, never commit)
+**/GAMUS_SMOKE/
+**/training/GAMUS_SUBSET/
+**/training/gamus_subset_cache/
 
 # Local model checkpoints
 **/backend/models/

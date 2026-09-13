@@ -14,14 +14,26 @@ from metrics import regression_metrics
 
 
 def ssi_loss(prediction, target, valid):
+    """Scale/shift-invariant loss (Ranftl et al.): fit `y = scale*x + shift`
+    per sample in closed form (normal equations for a 2-parameter linear fit)
+    and score the residual.
+
+    This is deliberately NOT `torch.linalg.lstsq`: lstsq's backward pass over
+    the full ~O(crop_size^2) valid-pixel vector allocates memory on the order
+    of pixel_count^2, which OOMs (tens of GB) even at a batch size of 1 with
+    a 384x384 crop. The closed form below is algebraically the same 2-column
+    least-squares solution but stays O(N) in both directions.
+    """
     losses = []
     for pred, truth, mask in zip(prediction, target, valid):
         mask = mask.squeeze(0)
         x, y = pred.squeeze(0)[mask], truth.squeeze(0)[mask]
         if x.numel() < 8:
             continue
-        A = torch.stack([x, torch.ones_like(x)], dim=1)
-        scale, shift = torch.linalg.lstsq(A, y.unsqueeze(1)).solution[:2, 0]
+        x_mean, y_mean = x.mean(), y.mean()
+        x_centered = x - x_mean
+        scale = torch.sum(x_centered * (y - y_mean)) / (torch.sum(x_centered * x_centered) + 1e-6)
+        shift = y_mean - scale * x_mean
         residual = scale * x + shift - y
         losses.append(torch.mean(residual ** 2) / (torch.mean(y ** 2) + 1e-6))
     return torch.stack(losses).mean() if losses else prediction.sum() * 0.0

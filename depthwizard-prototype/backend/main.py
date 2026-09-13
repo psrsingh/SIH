@@ -10,6 +10,7 @@ DEM calibration) -> DSM -> (GeoTIFF DSM if georeferenced) -> 3D GLB terrain
 import asyncio
 import logging
 import os
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -21,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
 
-from depth_estimation import estimate_depth
+from depth_estimation import estimate_depth, warm_up
 from calibration import calibrate_height, load_gcps, read_geotiff_info
 from mesh_builder import build_mesh_glb
 
@@ -30,13 +31,60 @@ OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "outputs"))
 OUTPUT_DIR.mkdir(exist_ok=True)
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(50 * 1024 * 1024)))
+# Sanity cap on decoded raster size (not file size) — bounds memory/CPU for a
+# malformed or maliciously huge upload before it reaches GDAL/the depth model.
+MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", str(50_000_000)))
+OUTPUT_RETENTION_HOURS = float(os.getenv("OUTPUT_RETENTION_HOURS", "24"))
+MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "2"))
+_ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS")
+ALLOWED_ORIGINS = (
+    [origin.strip() for origin in _ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
+    if _ALLOWED_ORIGINS_ENV
+    else ["http://localhost:8010", "http://127.0.0.1:8010"]
+)
 logger = logging.getLogger("depthwizard")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 app = FastAPI(title="DepthWizard Prototype API")
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"]
 )
+
+# Bounds concurrent CPU-heavy depth-inference + mesh-build work so a burst of
+# uploads can't pile up unbounded threads competing for CPU/RAM.
+_job_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+
+def _client_error(exc: Exception, context: str) -> str:
+    """Log the full exception server-side; return a short, safe client message."""
+    logger.exception("%s failed", context)
+    return f"{context} failed. See server logs for details ({type(exc).__name__})."
+
+
+def _sweep_old_outputs():
+    if OUTPUT_RETENTION_HOURS <= 0:
+        return
+    cutoff = time.time() - OUTPUT_RETENTION_HOURS * 3600
+    for job_dir in OUTPUT_DIR.iterdir():
+        try:
+            if job_dir.is_dir() and job_dir.stat().st_mtime < cutoff:
+                shutil.rmtree(job_dir, ignore_errors=True)
+        except OSError:
+            continue
+
+
+@app.middleware("http")
+async def _no_cache_for_dev(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.on_event("startup")
+async def _load_depth_model_on_startup():
+    await asyncio.to_thread(_sweep_old_outputs)
+    backend_name = await asyncio.to_thread(warm_up)
+    logger.info("depth model ready: %s", backend_name)
 
 
 def _save_depth_preview(depth: np.ndarray, path: Path):
@@ -103,6 +151,8 @@ async def process_image(
         raise HTTPException(status_code=400, detail="Upload must be PNG, JPG, or GeoTIFF.")
     if mesh_resolution < 8 or mesh_resolution > 512:
         raise HTTPException(status_code=400, detail="mesh_resolution must be between 8 and 512.")
+    if local_tile_size < 8 or local_tile_size > 512:
+        raise HTTPException(status_code=400, detail="local_tile_size must be between 8 and 512.")
     if not np.isfinite(min_height) or not np.isfinite(max_height) or max_height <= min_height:
         raise HTTPException(status_code=400, detail="max_height must be finite and greater than min_height.")
     is_geotiff = suffix in (".tif", ".tiff")
@@ -128,12 +178,19 @@ async def process_image(
     try:
         img = Image.open(input_path).convert("RGB")
     except Exception as exc:
-        return JSONResponse(status_code=400, content={"error": f"Unable to read image: {exc}"})
+        return JSONResponse(status_code=400, content={"error": _client_error(exc, "Reading the uploaded image")})
 
-    try:
-        rel_depth, method = await asyncio.to_thread(estimate_depth, img)
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": f"Depth estimation failed: {exc}"})
+    if img.width * img.height > MAX_IMAGE_PIXELS:
+        return JSONResponse(status_code=400, content={
+            "error": f"Image is too large to process ({img.width}x{img.height} exceeds "
+                     f"{MAX_IMAGE_PIXELS} pixels)."
+        })
+
+    async with _job_semaphore:
+        try:
+            rel_depth, method = await asyncio.to_thread(estimate_depth, img)
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"error": _client_error(exc, "Depth estimation")})
 
     reference_dem_path = None
     if reference_dem is not None:
@@ -147,8 +204,11 @@ async def process_image(
             return JSONResponse(status_code=400, content={
                 "error": "Reference DEM must be a GeoTIFF."
             })
+        reference_dem_bytes = await reference_dem.read()
+        if len(reference_dem_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"Reference DEM exceeds {MAX_UPLOAD_SIZE} bytes.")
         reference_dem_path = job_dir / f"reference_dem{ref_suffix}"
-        reference_dem_path.write_bytes(await reference_dem.read())
+        reference_dem_path.write_bytes(reference_dem_bytes)
 
     gcps = None
     if gcp_file is not None:
@@ -158,12 +218,15 @@ async def process_image(
             return JSONResponse(status_code=400, content={
                 "error": "GCPs must be supplied as CSV, JSON, or GeoJSON."
             })
+        gcp_bytes = await gcp_file.read()
+        if len(gcp_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f"GCP file exceeds {MAX_UPLOAD_SIZE} bytes.")
         gcp_path = job_dir / f"gcps{gcp_suffix}"
-        gcp_path.write_bytes(await gcp_file.read())
+        gcp_path.write_bytes(gcp_bytes)
         try:
-            gcps = load_gcps(gcp_path)
+            gcps = load_gcps(gcp_path, transform=geo_info.get("transform") if geo_info else None)
         except Exception as exc:
-            return JSONResponse(status_code=400, content={"error": f"Unable to read GCPs: {exc}"})
+            return JSONResponse(status_code=400, content={"error": _client_error(exc, "Reading the GCP file")})
 
     try:
         dsm, calib_info = calibrate_height(
@@ -203,21 +266,22 @@ async def process_image(
             dsm_url = f"/outputs/{job_id}/dsm.tif"
         except Exception as exc:
             return JSONResponse(status_code=500, content={
-                "error": f"Failed to save DSM GeoTIFF: {exc}"
+                "error": _client_error(exc, "Saving the DSM GeoTIFF")
             })
 
     pixel_x, pixel_y = _get_pixel_size(geo_info)
 
     mesh_path = job_dir / "terrain.glb"
-    try:
-        await asyncio.to_thread(
-            build_mesh_glb, img, dsm, mesh_path, resolution=mesh_resolution,
-            pixel_size_x=pixel_x, pixel_size_y=pixel_y
-        )
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={
-            "error": f"3D mesh generation failed: {exc}"
-        })
+    async with _job_semaphore:
+        try:
+            await asyncio.to_thread(
+                build_mesh_glb, img, dsm, mesh_path, resolution=mesh_resolution,
+                pixel_size_x=pixel_x, pixel_size_y=pixel_y
+            )
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={
+                "error": _client_error(exc, "3D mesh generation")
+            })
 
     elapsed = time.perf_counter() - started
     logger.info("job=%s model=%s inference_method=%s calibration=%s elapsed=%.3fs",

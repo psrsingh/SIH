@@ -30,6 +30,25 @@ def _clean_dsm(dsm):
     return np.clip(values, low, high).astype(np.float32)
 
 
+MAX_TEXTURE_EDGE = 2048
+
+
+def _downsize_texture(img: Image.Image, max_edge: int = MAX_TEXTURE_EDGE) -> Image.Image:
+    """Cap the embedded glTF texture's longest edge.
+
+    Uploads can be up to MAX_UPLOAD_SIZE (50MB); baking a multi-thousand-
+    pixel source image into the GLB as-is produces needlessly huge files
+    and risks exceeding common GPU MAX_TEXTURE_SIZE limits (many cap at
+    4096/8192). UVs are already 0-1 normalized, so this needs no other
+    changes to the mesh.
+    """
+    if max(img.size) <= max_edge:
+        return img
+    scale = max_edge / max(img.size)
+    new_size = (max(1, round(img.width * scale)), max(1, round(img.height * scale)))
+    return img.resize(new_size, Image.Resampling.LANCZOS)
+
+
 def build_mesh_glb(
     img: Image.Image,
     dsm: np.ndarray,
@@ -77,18 +96,28 @@ def build_mesh_glb(
         for c in range(res - 1):
             i0, i1 = row0 + c, row0 + c + 1
             i2, i3 = row1 + c, row1 + c + 1
-            faces.append((i0, i2, i1))
-            faces.append((i1, i2, i3))
+            # Wind CCW as seen from +Y (above) so face normals point up;
+            # the frontend renders with default FrontSide culling, and the
+            # opposite winding made every triangle invisible from the
+            # camera's default overhead view.
+            faces.append((i0, i1, i2))
+            faces.append((i1, i3, i2))
     faces = np.asarray(faces, dtype=np.int32)
 
+    texture_img = _downsize_texture(img.convert("RGB"))
     material = trimesh.visual.material.PBRMaterial(
-        baseColorTexture=img.convert("RGB"), roughnessFactor=0.9
+        baseColorTexture=texture_img, roughnessFactor=0.9, metallicFactor=0.0
     )
     vertex_colors = np.full((res * res, 4), 255, dtype=np.uint8)
     visual = trimesh.visual.texture.TextureVisuals(
-        uv=uv, image=img.convert("RGB"), material=material
+        uv=uv, image=texture_img, material=material
     )
-    visual.vertex_colors = vertex_colors
+    # trimesh's glTF exporter only emits a COLOR_0 accessor when it finds
+    # colors under vertex_attributes["color"] — a plain `.vertex_colors`
+    # assignment on TextureVisuals is silently ignored at export time,
+    # which would leave the frontend's elevation-ramp toggle with no
+    # color attribute to switch to.
+    visual.vertex_attributes["color"] = vertex_colors
     mesh = trimesh.Trimesh(
         vertices=np.asarray(vertices, dtype=np.float32),
         faces=faces,
